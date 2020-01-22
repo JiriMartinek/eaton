@@ -16,6 +16,7 @@ Challenge is:
 
 //<! storage of the number of messages
 std::unordered_map<std::string, size_t> messagesCounterMap;
+pthread_mutex_t mutex;
 
 /** handle socket data
  * @param socketfd socket descriptor
@@ -29,10 +30,12 @@ void handleData(int socketfd)
     //TODO handle received measurement
     //std::string measurement = std::string(data.deviceMeasurement);
     size_t value = 0;
+    pthread_mutex_lock(&mutex);
     if (messagesCounterMap.find(key) != messagesCounterMap.end()) {
         value = messagesCounterMap[key];
     }
     messagesCounterMap[key] = ++value;
+    pthread_mutex_unlock(&mutex);
 
 #if DEBUG_
     char dbgMessage[BUFSIZE];
@@ -53,11 +56,13 @@ void* statisticLoop(void *argument){
     while(true)
     {
         size_t sum = 0;
+        pthread_mutex_lock(&mutex);
         for ( const auto &pair : messagesCounterMap ) {
             sprintf(message, "Number of messages per device %s:%d", pair.first.c_str(), pair.second);
             sum += pair.second;
             MESSAGE(MSG_INFO, message);
         }
+        pthread_mutex_unlock(&mutex);
         sprintf(message, "Number of all messages: %d\n------\n", sum);
         MESSAGE(MSG_INFO, message);
         sleep(5);
@@ -113,6 +118,7 @@ void* tcpLoop(void *argument)
 */
 int main(int argc, char* argv[])
 {
+    pthread_mutex_init(&mutex, NULL);
     pthread_t threadTcp;
     int rv1 = pthread_create( &threadTcp, NULL, tcpLoop, (void*)"threadTcp");
 
@@ -128,6 +134,7 @@ int main(int argc, char* argv[])
         pthread_join(threadStatistic, NULL);
         pthread_join(threadTcp, NULL);
     }
+    pthread_mutex_destroy(&mutex);
 
     return 0;
 }
